@@ -327,8 +327,21 @@ def analyze_technical(ticker, base_date):
     try:
         end = datetime.strptime(base_date, '%Y%m%d')
         start = end - timedelta(days=400)
-        df = stock.get_market_ohlcv_by_date(start.strftime('%Y%m%d'), end.strftime('%Y%m%d'), ticker)
-        if df.empty or len(df) < 60: return '데이터부족', 0
+        
+        df = None
+        # 1차 시도: pykrx
+        try:
+            df = stock.get_market_ohlcv_by_date(start.strftime('%Y%m%d'), end.strftime('%Y%m%d'), ticker)
+        except:
+            pass
+            
+        # 2차 시도: FinanceDataReader (pykrx 실패 시)
+        if df is None or df.empty:
+            df = fdr.DataReader(ticker, start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
+            if not df.empty:
+                df = df.rename(columns={'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Volume': '거래량'})
+                
+        if df is None or df.empty or len(df) < 60: return '데이터부족', 0
         close = df['종가']
         df['MA20'], df['MA60'] = close.rolling(20).mean(), close.rolling(60).mean()
         delta = close.diff()
@@ -341,12 +354,38 @@ def analyze_technical(ticker, base_date):
 
 @st.cache_data
 def get_investor_flow(ticker, base_date, days=20):
+    end = datetime.strptime(base_date, '%Y%m%d')
+    start = end - timedelta(days=days * 2)
+    # 1차 시도: pykrx
     try:
-        end = datetime.strptime(base_date, '%Y%m%d')
-        start = end - timedelta(days=days * 2)
         df = stock.get_market_trading_value_by_date(start.strftime('%Y%m%d'), end.strftime('%Y%m%d'), ticker)
-        return df.tail(days) if not df.empty else pd.DataFrame()
-    except: return pd.DataFrame()
+        if not df.empty and ('기관합계' in df.columns or '외국인합계' in df.columns):
+            return df.tail(days)
+    except:
+        pass
+        
+    # 2차 시도: 네이버 금융 HTML 파싱 (pykrx 실패 시)
+    try:
+        url = f'https://finance.naver.com/item/frgn.naver?code={ticker}'
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.get(url, headers=headers, timeout=10)
+        r.encoding = 'euc-kr'
+        dfs = pd.read_html(StringIO(r.text), encoding='euc-kr')
+        df3 = dfs[3]
+        df3.columns = ['_'.join(str(c) for c in col).strip() if isinstance(col, tuple) else col for col in df3.columns]
+        dfclean = df3.dropna(subset=['날짜_날짜', '기관_순매매량', '외국인_순매매량']).copy()
+        dfclean['날짜'] = pd.to_datetime(dfclean['날짜_날짜'], format='%Y.%m.%d', errors='coerce')
+        dfclean['종가_종가'] = pd.to_numeric(dfclean['종가_종가'], errors='coerce')
+        dfclean['기관_순매매량'] = pd.to_numeric(dfclean['기관_순매매량'], errors='coerce')
+        dfclean['외국인_순매매량'] = pd.to_numeric(dfclean['외국인_순매매량'], errors='coerce')
+        dfclean = dfclean.dropna(subset=['날짜'])
+        dfclean['기관합계'] = dfclean['기관_순매매량'] * dfclean['종가_종가']
+        dfclean['외국인합계'] = dfclean['외국인_순매매량'] * dfclean['종가_종가']
+        dfclean = dfclean.set_index('날짜').sort_index()
+        return dfclean.tail(days)
+    except Exception as e:
+        print(f"네이버 수급 파싱 에러: {e}")
+        return pd.DataFrame()
 
 def compute_recommendation_score(row):
     score = 0.0
@@ -365,7 +404,24 @@ def compute_recommendation_score(row):
 def load_ohlcv(ticker, base_date, days=300):
     end = datetime.strptime(base_date, '%Y%m%d')
     start = end - timedelta(days=days)
-    return stock.get_market_ohlcv_by_date(start.strftime('%Y%m%d'), end.strftime('%Y%m%d'), ticker)
+    
+    df = None
+    # 1차 시도: pykrx
+    try:
+        df = stock.get_market_ohlcv_by_date(start.strftime('%Y%m%d'), end.strftime('%Y%m%d'), ticker)
+    except:
+        pass
+        
+    # 2차 시도: FinanceDataReader (pykrx 실패 시)
+    if df is None or df.empty:
+        try:
+            df = fdr.DataReader(ticker, start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
+            if not df.empty:
+                df = df.rename(columns={'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Volume': '거래량'})
+        except:
+            pass
+            
+    return df if df is not None else pd.DataFrame()
 
 def show_advanced_candle(ticker, ticker_name, base_date):
     try:

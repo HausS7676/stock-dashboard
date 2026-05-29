@@ -6,3 +6,4 @@ beautifulsoup4
 plotly
 finance-datareader
 pykrx
+setuptools
