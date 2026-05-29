@@ -380,16 +380,19 @@ def get_investor_flow(ticker, base_date, days=20, engine="자동"):
             r = requests.get(url, headers=headers, timeout=10)
             r.encoding = 'euc-kr'
             dfs = pd.read_html(StringIO(r.text), encoding='euc-kr')
-            df3 = dfs[3]
-            df3.columns = ['_'.join(str(c) for c in col).strip() if isinstance(col, tuple) else col for col in df3.columns]
-            dfclean = df3.dropna(subset=['날짜_날짜', '기관_순매매량', '외국인_순매매량']).copy()
-            dfclean['날짜'] = pd.to_datetime(dfclean['날짜_날짜'], format='%Y.%m.%d', errors='coerce')
-            dfclean['종가_종가'] = pd.to_numeric(dfclean['종가_종가'], errors='coerce')
-            dfclean['기관_순매매량'] = pd.to_numeric(dfclean['기관_순매매량'], errors='coerce')
-            dfclean['외국인_순매매량'] = pd.to_numeric(dfclean['외국인_순매매량'], errors='coerce')
+            df3 = dfs[3].copy()
+            if len(df3.columns) < 7:
+                return pd.DataFrame()
+                
+            dfclean = pd.DataFrame()
+            dfclean['날짜'] = pd.to_datetime(df3.iloc[:, 0], format='%Y.%m.%d', errors='coerce')
+            dfclean['종가'] = pd.to_numeric(df3.iloc[:, 1], errors='coerce')
+            dfclean['기관_순매매량'] = pd.to_numeric(df3.iloc[:, 5], errors='coerce')
+            dfclean['외국인_순매매량'] = pd.to_numeric(df3.iloc[:, 6], errors='coerce')
+            
             dfclean = dfclean.dropna(subset=['날짜'])
-            dfclean['기관합계'] = dfclean['기관_순매매량'] * dfclean['종가_종가']
-            dfclean['외국인합계'] = dfclean['외국인_순매매량'] * dfclean['종가_종가']
+            dfclean['기관합계'] = dfclean['기관_순매매량'] * dfclean['종가']
+            dfclean['외국인합계'] = dfclean['외국인_순매매량'] * dfclean['종가']
             dfclean = dfclean.set_index('날짜').sort_index()
             return dfclean.tail(days)
         except Exception as e:
