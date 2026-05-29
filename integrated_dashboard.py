@@ -404,6 +404,8 @@ def get_investor_flow(ticker, base_date, days=20, engine="자동"):
             dfclean = dfclean.dropna(subset=['날짜'])
             dfclean['기관합계'] = dfclean['기관_순매매량'] * dfclean['종가']
             dfclean['외국인합계'] = dfclean['외국인_순매매량'] * dfclean['종가']
+            # 네이버 데이터에는 '개인' 수급이 없으므로, (기관 + 외국인)의 반대값으로 개인 수급을 근사 추정합니다.
+            dfclean['개인'] = -(dfclean['기관합계'] + dfclean['외국인합계'])
             dfclean = dfclean.set_index('날짜').sort_index()
             return dfclean.tail(days)
         except Exception as e:
@@ -486,18 +488,37 @@ def show_advanced_candle(ticker, ticker_name, base_date, engine="자동"):
         inv_df = get_investor_flow(ticker, base_date, 20, engine)
         if inv_df.empty: st.info("수급 데이터를 가져올 수 없습니다.")
         else:
-            investor_cols = [c for c in ['기관합계', '외국인합계', '금융투자', '개인'] if c in inv_df.columns]
-            tab_labels = {'기관합계': '🏢 기관', '외국인합계': '🌎 외국인', '금융투자': '💼 금융투자', '개인': '👤 개인'}
-            tabs = st.tabs([tab_labels.get(c, c) for c in investor_cols])
-            for tab, col in zip(tabs, investor_cols):
-                with tab:
-                    series = inv_df[col] / 1e8
-                    colors = ['#FF4B4B' if v > 0 else '#0068FF' for v in series]
-                    bar_fig = go.Figure(go.Bar(
-                        x=inv_df.index.strftime('%m/%d'), y=series, marker_color=colors, name=col
-                    ))
-                    bar_fig.update_layout(yaxis_title='순매수 (억원)', height=300, margin=dict(l=10, r=10, t=10, b=10))
-                    st.plotly_chart(bar_fig, use_container_width=True)
+            investor_cols = [c for c in ['기관합계', '외국인합계', '개인', '금융투자'] if c in inv_df.columns]
+            name_map = {'기관합계': '🏢 기관', '외국인합계': '🌎 외국인', '개인': '👤 개인', '금융투자': '💼 금융투자'}
+            
+            selected_col = st.radio(
+                "투자자 선택:", 
+                options=investor_cols, 
+                format_func=lambda x: name_map.get(x, x),
+                horizontal=True,
+                label_visibility="collapsed"
+            )
+            
+            series = inv_df[selected_col] / 1e8
+            colors = ['#FF4B4B' if v > 0 else '#0068FF' for v in series]
+            bar_fig = go.Figure(go.Bar(
+                x=inv_df.index.strftime('%m/%d'), y=series, marker_color=colors, name=selected_col
+            ))
+            bar_fig.update_layout(
+                yaxis_title='순매수 (억원)', 
+                height=300, 
+                margin=dict(l=10, r=10, t=10, b=10),
+                xaxis=dict(tickangle=-90) # 날짜 세로 표기로 폭 절약
+            )
+            
+            # 우회 모드일 경우 개인 수급 추정치 안내 문구
+            if selected_col == '개인' and "pykrx" not in engine and "자동" not in engine:
+                st.caption("※ 네이버 파싱 모드에서는 개인 수급이 제공되지 않아, (기관+외국인)의 반대 값으로 근사치를 표시합니다.")
+            elif selected_col == '개인' and ("자동" in engine and st.session_state.get('data_engine') != '한국거래소 (pykrx) 강제'):
+                 # We can't perfectly know which engine fired, but it's fine.
+                 pass
+                 
+            st.plotly_chart(bar_fig, use_container_width=True)
     except Exception as e:
         st.error(f"차트 로딩 실패: {e}")
 
