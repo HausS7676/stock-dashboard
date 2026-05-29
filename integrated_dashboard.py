@@ -37,6 +37,11 @@ st.markdown("""
 html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
 .stApp { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #f1f5f9; }
 
+/* 기본 메뉴 및 푸터 숨기기 (한글화/깔끔한 UI용) */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+
 /* 공통 타이틀 */
 .main-title {
     font-size: 2.5rem; font-weight: 900; text-align: center; margin-top: 1rem;
@@ -259,12 +264,12 @@ def get_top_stock_picks() -> pd.DataFrame:
             score = (curr * curr_vol) * 0.1 + (ma5 - ma10) / ma10 * 1000
             picks.append({
                 "코드": code, "종목명": name, "현재가": int(curr),
-                "거래대금(억)": int(curr * curr_vol / 1e8), "거래량비율": round(vol_ratio, 2), "Score": score
+                "거래대금(억)": int(curr * curr_vol / 1e8), "거래량비율": round(vol_ratio, 2), "점수": score
             })
         except Exception: continue
 
     if not picks: return pd.DataFrame()
-    pdf = pd.DataFrame(picks).sort_values("Score", ascending=False).head(5)
+    pdf = pd.DataFrame(picks).sort_values("점수", ascending=False).head(5)
     return pdf[["종목명", "현재가", "거래대금(억)", "거래량비율"]].reset_index(drop=True)
 
 
@@ -425,9 +430,9 @@ def render_market_timing():
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if score >= 70: color_class, status_text = "text-bull", "매수 적극 권장 (Bull Market)"
-        elif score >= 40: color_class, status_text = "text-neutral", "부분 매수 / 관망 (Neutral)"
-        else: color_class, status_text = "text-bear", "매수 보류 / 현금 확보 (Bear Market)"
+        if score >= 70: color_class, status_text = "text-bull", "매수 적극 권장 (강세장)"
+        elif score >= 40: color_class, status_text = "text-neutral", "부분 매수 / 관망 (중립)"
+        else: color_class, status_text = "text-bear", "매수 보류 / 현금 확보 (약세장)"
         st.markdown(f"""
         <div class="card" style="text-align:center; padding:2rem;">
             <div class="card-title" style="justify-content:center;">현재 시장 진입(매수) 점수</div>
