@@ -380,15 +380,26 @@ def get_investor_flow(ticker, base_date, days=20, engine="자동"):
             r = requests.get(url, headers=headers, timeout=10)
             r.encoding = 'euc-kr'
             dfs = pd.read_html(StringIO(r.text), encoding='euc-kr')
-            df3 = dfs[3].copy()
-            if len(df3.columns) < 7:
+            
+            # 서버 환경(lxml, bs4 등)에 따라 표의 순서가 다를 수 있으므로, 첫 번째 열이 '날짜' 형식인 표를 동적으로 찾음
+            df_target = None
+            for df in dfs:
+                if len(df.columns) >= 7:
+                    # 첫 번째 열이 'YYYY.MM.DD' 형태의 날짜인지 확인
+                    dates = pd.to_datetime(df.iloc[:, 0], format='%Y.%m.%d', errors='coerce').dropna()
+                    if len(dates) >= 10:  # 최소 10일 이상의 정상적인 날짜 데이터가 있다면 우리가 찾는 수급 표가 맞음
+                        df_target = df.copy()
+                        break
+                        
+            if df_target is None:
+                st.warning(f"네이버 금융 페이지에서 수급 표를 찾지 못했습니다. (총 {len(dfs)}개 표 파싱됨)")
                 return pd.DataFrame()
                 
             dfclean = pd.DataFrame()
-            dfclean['날짜'] = pd.to_datetime(df3.iloc[:, 0], format='%Y.%m.%d', errors='coerce')
-            dfclean['종가'] = pd.to_numeric(df3.iloc[:, 1], errors='coerce')
-            dfclean['기관_순매매량'] = pd.to_numeric(df3.iloc[:, 5], errors='coerce')
-            dfclean['외국인_순매매량'] = pd.to_numeric(df3.iloc[:, 6], errors='coerce')
+            dfclean['날짜'] = pd.to_datetime(df_target.iloc[:, 0], format='%Y.%m.%d', errors='coerce')
+            dfclean['종가'] = pd.to_numeric(df_target.iloc[:, 1], errors='coerce')
+            dfclean['기관_순매매량'] = pd.to_numeric(df_target.iloc[:, 5], errors='coerce')
+            dfclean['외국인_순매매량'] = pd.to_numeric(df_target.iloc[:, 6], errors='coerce')
             
             dfclean = dfclean.dropna(subset=['날짜'])
             dfclean['기관합계'] = dfclean['기관_순매매량'] * dfclean['종가']
