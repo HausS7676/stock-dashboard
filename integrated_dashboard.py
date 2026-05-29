@@ -84,10 +84,25 @@ hr { border-color: rgba(148, 163, 184, 0.2); }
     gap: 1rem;
     padding-top: 1rem;
     padding-bottom: 1rem;
+    color: #94a3b8 !important; /* 선택 안된 탭 가독성 */
+    font-weight: 500;
 }
 .stTabs [aria-selected="true"] {
     background-color: rgba(56, 189, 248, 0.1);
     border-bottom-color: #38bdf8;
+    color: #f8fafc !important; /* 선택된 탭 밝게 */
+    font-weight: 700;
+}
+
+/* 위젯(라디오 버튼, 셀렉트박스 등) 가독성 강제 향상 */
+.stRadio label, .stSelectbox label, .stTextInput label, div[data-baseweb="select"], .st-emotion-cache-1629p8f p {
+    color: #f1f5f9 !important;
+}
+
+/* 기본 텍스트 렌더링 최적화 */
+* {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 </style>
 """, unsafe_allow_html=True)
