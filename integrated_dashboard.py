@@ -393,7 +393,7 @@ def get_investor_flow(ticker, base_date, days=20, engine="자동"):
             dfclean = dfclean.set_index('날짜').sort_index()
             return dfclean.tail(days)
         except Exception as e:
-            print(f"네이버 수급 파싱 에러: {e}")
+            st.warning(f"Naver 수급 파싱 에러: {e}")
             return pd.DataFrame()
             
     return pd.DataFrame()
@@ -666,8 +666,8 @@ def main():
     st.sidebar.markdown("### ⚙️ 데이터 소스 설정")
     engine_status = check_engine_status()
     
-    pykrx_display = '🟢 정상 작동 중' if engine_status['pykrx'] else f"🔴 연결 오류<br><span style='font-size:0.75rem; color:#ef4444;'>({engine_status['pykrx_error']})</span>"
-    naver_display = '🟢 정상 작동 중' if engine_status['naver'] else f"🔴 연결 오류<br><span style='font-size:0.75rem; color:#ef4444;'>({engine_status['naver_error']})</span>"
+    pykrx_display = '🟢 정상 작동 중' if engine_status['pykrx'] else '🔴 연결 오류'
+    naver_display = '🟢 정상 작동 중' if engine_status['naver'] else '🔴 연결 오류'
     
     st.sidebar.markdown(f"""
     **현재 엔진 상태:**
