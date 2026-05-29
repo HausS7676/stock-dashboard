@@ -24,8 +24,10 @@ warnings.filterwarnings("ignore")
 try:
     from pykrx import stock
     PYKRX_AVAILABLE = True
-except Exception:
+    PYKRX_ERROR = ""
+except Exception as e:
     PYKRX_AVAILABLE = False
+    PYKRX_ERROR = str(e)
 
 # ──────────────────────────────────────────
 # Streamlit 페이지 설정 (최상단)
@@ -634,7 +636,7 @@ def main():
     if PYKRX_AVAILABLE:
         st.markdown('<p style="text-align:center; color:#10b981; font-size:0.9rem;">🟢 <b>데이터 소스:</b> 한국거래소 (pykrx 메인 엔진)</p>', unsafe_allow_html=True)
     else:
-        st.markdown('<p style="text-align:center; color:#f59e0b; font-size:0.9rem;">🟡 <b>데이터 소스:</b> Naver & FDR (세컨 플랜 우회 모드)</p>', unsafe_allow_html=True)
+        st.markdown(f'<p style="text-align:center; color:#f59e0b; font-size:0.9rem;">🟡 <b>데이터 소스:</b> Naver & FDR (세컨 플랜 우회 모드) <br><span style="font-size:0.75rem; color:#ef4444;">(pykrx 에러 원인: {PYKRX_ERROR})</span></p>', unsafe_allow_html=True)
         
     # 탭 구성
     tab1, tab2 = st.tabs(["🧭 마켓 타이밍 & 요약 픽", "🚀 스마트 수급 스캐너 (상세 검색)"])
