@@ -23,8 +23,9 @@ warnings.filterwarnings("ignore")
 # pykrx는 OHLCV 및 투자자별 수급용 (app.py 종속성)
 try:
     from pykrx import stock
-except Exception as e:
-    st.error(f"pykrx 로드 실패: {e}")
+    PYKRX_AVAILABLE = True
+except Exception:
+    PYKRX_AVAILABLE = False
 
 # ──────────────────────────────────────────
 # Streamlit 페이지 설정 (최상단)
@@ -630,6 +631,11 @@ def render_stock_scanner():
 def main():
     st.markdown('<div class="main-title">AI 통합 주식 분석 대시보드</div>', unsafe_allow_html=True)
     
+    if PYKRX_AVAILABLE:
+        st.markdown('<p style="text-align:center; color:#10b981; font-size:0.9rem;">🟢 <b>데이터 소스:</b> 한국거래소 (pykrx 메인 엔진)</p>', unsafe_allow_html=True)
+    else:
+        st.markdown('<p style="text-align:center; color:#f59e0b; font-size:0.9rem;">🟡 <b>데이터 소스:</b> Naver & FDR (세컨 플랜 우회 모드)</p>', unsafe_allow_html=True)
+        
     # 탭 구성
     tab1, tab2 = st.tabs(["🧭 마켓 타이밍 & 요약 픽", "🚀 스마트 수급 스캐너 (상세 검색)"])
     
