@@ -644,19 +644,19 @@ def render_stock_scanner():
 
 @st.cache_data(ttl=3600)
 def check_engine_status():
-    status = {"pykrx": False, "naver": False}
+    status = {"pykrx": False, "naver": False, "pykrx_error": "", "naver_error": ""}
     try:
         from pykrx import stock
         stock.get_market_ohlcv_by_date((datetime.now() - timedelta(days=5)).strftime('%Y%m%d'), datetime.now().strftime('%Y%m%d'), "005930")
         status["pykrx"] = True
-    except:
-        pass
+    except Exception as e:
+        status["pykrx_error"] = str(e) or repr(e)
         
     try:
         fdr.DataReader("005930", (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d'))
         status["naver"] = True
-    except:
-        pass
+    except Exception as e:
+        status["naver_error"] = repr(e)
     return status
 
 def main():
@@ -665,11 +665,15 @@ def main():
     # 사이드바에서 데이터 소스 선택 및 상태 표시
     st.sidebar.markdown("### ⚙️ 데이터 소스 설정")
     engine_status = check_engine_status()
+    
+    pykrx_display = '🟢 정상 작동 중' if engine_status['pykrx'] else f"🔴 연결 오류<br><span style='font-size:0.75rem; color:#ef4444;'>({engine_status['pykrx_error']})</span>"
+    naver_display = '🟢 정상 작동 중' if engine_status['naver'] else f"🔴 연결 오류<br><span style='font-size:0.75rem; color:#ef4444;'>({engine_status['naver_error']})</span>"
+    
     st.sidebar.markdown(f"""
     **현재 엔진 상태:**
-    - 한국거래소(pykrx): {'🟢 정상 작동 중' if engine_status['pykrx'] else '🔴 연결 오류'}
-    - Naver & FDR: {'🟢 정상 작동 중' if engine_status['naver'] else '🔴 연결 오류'}
-    """)
+    - 한국거래소(pykrx): {pykrx_display}
+    - Naver & FDR: {naver_display}
+    """, unsafe_allow_html=True)
     
     selected_engine = st.sidebar.radio(
         "데이터 수집 엔진 선택", 
