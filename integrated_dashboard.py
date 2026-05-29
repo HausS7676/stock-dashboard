@@ -326,20 +326,22 @@ def scan_hybrid_flow(min_mktcap=2000, min_trading=5):
         return pd.DataFrame(), ""
 
 @st.cache_data
-def analyze_technical(ticker, base_date):
+def analyze_technical(ticker, base_date, engine="자동"):
     try:
         end = datetime.strptime(base_date, '%Y%m%d')
         start = end - timedelta(days=400)
         
         df = None
-        # 1차 시도: pykrx
-        try:
-            df = stock.get_market_ohlcv_by_date(start.strftime('%Y%m%d'), end.strftime('%Y%m%d'), ticker)
-        except:
-            pass
+        use_pykrx = "pykrx" in engine or "자동" in engine
+        use_fdr = "Naver" in engine or "자동" in engine
+        
+        if use_pykrx:
+            try:
+                df = stock.get_market_ohlcv_by_date(start.strftime('%Y%m%d'), end.strftime('%Y%m%d'), ticker)
+            except:
+                pass
             
-        # 2차 시도: FinanceDataReader (pykrx 실패 시)
-        if df is None or df.empty:
+        if (df is None or df.empty) and use_fdr:
             df = fdr.DataReader(ticker, start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
             if not df.empty:
                 df = df.rename(columns={'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Volume': '거래량'})
@@ -356,39 +358,45 @@ def analyze_technical(ticker, base_date):
     except: return '오류', 0
 
 @st.cache_data
-def get_investor_flow(ticker, base_date, days=20):
+def get_investor_flow(ticker, base_date, days=20, engine="자동"):
     end = datetime.strptime(base_date, '%Y%m%d')
     start = end - timedelta(days=days * 2)
-    # 1차 시도: pykrx
-    try:
-        df = stock.get_market_trading_value_by_date(start.strftime('%Y%m%d'), end.strftime('%Y%m%d'), ticker)
-        if not df.empty and ('기관합계' in df.columns or '외국인합계' in df.columns):
-            return df.tail(days)
-    except:
-        pass
+    
+    use_pykrx = "pykrx" in engine or "자동" in engine
+    use_fdr = "Naver" in engine or "자동" in engine
+    
+    if use_pykrx:
+        try:
+            df = stock.get_market_trading_value_by_date(start.strftime('%Y%m%d'), end.strftime('%Y%m%d'), ticker)
+            if not df.empty and ('기관합계' in df.columns or '외국인합계' in df.columns):
+                return df.tail(days)
+        except:
+            pass
         
-    # 2차 시도: 네이버 금융 HTML 파싱 (pykrx 실패 시)
-    try:
-        url = f'https://finance.naver.com/item/frgn.naver?code={ticker}'
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        r = requests.get(url, headers=headers, timeout=10)
-        r.encoding = 'euc-kr'
-        dfs = pd.read_html(StringIO(r.text), encoding='euc-kr')
-        df3 = dfs[3]
-        df3.columns = ['_'.join(str(c) for c in col).strip() if isinstance(col, tuple) else col for col in df3.columns]
-        dfclean = df3.dropna(subset=['날짜_날짜', '기관_순매매량', '외국인_순매매량']).copy()
-        dfclean['날짜'] = pd.to_datetime(dfclean['날짜_날짜'], format='%Y.%m.%d', errors='coerce')
-        dfclean['종가_종가'] = pd.to_numeric(dfclean['종가_종가'], errors='coerce')
-        dfclean['기관_순매매량'] = pd.to_numeric(dfclean['기관_순매매량'], errors='coerce')
-        dfclean['외국인_순매매량'] = pd.to_numeric(dfclean['외국인_순매매량'], errors='coerce')
-        dfclean = dfclean.dropna(subset=['날짜'])
-        dfclean['기관합계'] = dfclean['기관_순매매량'] * dfclean['종가_종가']
-        dfclean['외국인합계'] = dfclean['외국인_순매매량'] * dfclean['종가_종가']
-        dfclean = dfclean.set_index('날짜').sort_index()
-        return dfclean.tail(days)
-    except Exception as e:
-        print(f"네이버 수급 파싱 에러: {e}")
-        return pd.DataFrame()
+    if use_fdr:
+        try:
+            url = f'https://finance.naver.com/item/frgn.naver?code={ticker}'
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            r = requests.get(url, headers=headers, timeout=10)
+            r.encoding = 'euc-kr'
+            dfs = pd.read_html(StringIO(r.text), encoding='euc-kr')
+            df3 = dfs[3]
+            df3.columns = ['_'.join(str(c) for c in col).strip() if isinstance(col, tuple) else col for col in df3.columns]
+            dfclean = df3.dropna(subset=['날짜_날짜', '기관_순매매량', '외국인_순매매량']).copy()
+            dfclean['날짜'] = pd.to_datetime(dfclean['날짜_날짜'], format='%Y.%m.%d', errors='coerce')
+            dfclean['종가_종가'] = pd.to_numeric(dfclean['종가_종가'], errors='coerce')
+            dfclean['기관_순매매량'] = pd.to_numeric(dfclean['기관_순매매량'], errors='coerce')
+            dfclean['외국인_순매매량'] = pd.to_numeric(dfclean['외국인_순매매량'], errors='coerce')
+            dfclean = dfclean.dropna(subset=['날짜'])
+            dfclean['기관합계'] = dfclean['기관_순매매량'] * dfclean['종가_종가']
+            dfclean['외국인합계'] = dfclean['외국인_순매매량'] * dfclean['종가_종가']
+            dfclean = dfclean.set_index('날짜').sort_index()
+            return dfclean.tail(days)
+        except Exception as e:
+            print(f"네이버 수급 파싱 에러: {e}")
+            return pd.DataFrame()
+            
+    return pd.DataFrame()
 
 def compute_recommendation_score(row):
     score = 0.0
@@ -404,19 +412,21 @@ def compute_recommendation_score(row):
     return round(score, 1)
 
 @st.cache_data
-def load_ohlcv(ticker, base_date, days=300):
+def load_ohlcv(ticker, base_date, days=300, engine="자동"):
     end = datetime.strptime(base_date, '%Y%m%d')
     start = end - timedelta(days=days)
     
     df = None
-    # 1차 시도: pykrx
-    try:
-        df = stock.get_market_ohlcv_by_date(start.strftime('%Y%m%d'), end.strftime('%Y%m%d'), ticker)
-    except:
-        pass
-        
-    # 2차 시도: FinanceDataReader (pykrx 실패 시)
-    if df is None or df.empty:
+    use_pykrx = "pykrx" in engine or "자동" in engine
+    use_fdr = "Naver" in engine or "자동" in engine
+    
+    if use_pykrx:
+        try:
+            df = stock.get_market_ohlcv_by_date(start.strftime('%Y%m%d'), end.strftime('%Y%m%d'), ticker)
+        except:
+            pass
+            
+    if (df is None or df.empty) and use_fdr:
         try:
             df = fdr.DataReader(ticker, start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
             if not df.empty:
@@ -426,9 +436,9 @@ def load_ohlcv(ticker, base_date, days=300):
             
     return df if df is not None else pd.DataFrame()
 
-def show_advanced_candle(ticker, ticker_name, base_date):
+def show_advanced_candle(ticker, ticker_name, base_date, engine="자동"):
     try:
-        df = load_ohlcv(ticker, base_date, days=300)
+        df = load_ohlcv(ticker, base_date, 300, engine)
         if df.empty:
             st.warning("OHLCV 데이터가 없습니다.")
             return
@@ -459,7 +469,7 @@ def show_advanced_candle(ticker, ticker_name, base_date):
         st.plotly_chart(fig, use_container_width=True)
 
         st.subheader("💰 투자자별 순매수 동향 (최근 20거래일)")
-        inv_df = get_investor_flow(ticker, base_date, days=20)
+        inv_df = get_investor_flow(ticker, base_date, 20, engine)
         if inv_df.empty: st.info("수급 데이터를 가져올 수 없습니다.")
         else:
             investor_cols = [c for c in ['기관합계', '외국인합계', '금융투자', '개인'] if c in inv_df.columns]
@@ -600,9 +610,10 @@ def render_stock_scanner():
 
             top_stocks = result.head(30).copy().reset_index(drop=True)
             trends, rsis = [], []
+            current_engine = st.session_state.get('data_engine', '자동 (pykrx 우선)')
             with st.spinner("기술적 지표 계산 중..."):
                 for t in top_stocks['티커']:
-                    tr, rs = analyze_technical(t, base_date)
+                    tr, rs = analyze_technical(t, base_date, current_engine)
                     trends.append(tr)
                     rsis.append(rs)
             top_stocks['추세'], top_stocks['RSI'] = trends, rsis
@@ -623,20 +634,59 @@ def render_stock_scanner():
             st.subheader("📊 종목 정밀 차트")
             selected_name = st.selectbox('차트를 확인할 종목 선택', top_stocks['종목명'].tolist(), key='chart_select')
             selected_row = top_stocks[top_stocks['종목명'] == selected_name].iloc[0]
-            show_advanced_candle(selected_row['티커'], selected_name, base_date)
+            current_engine = st.session_state.get('data_engine', '자동 (pykrx 우선)')
+            show_advanced_candle(selected_row['티커'], selected_name, base_date, current_engine)
 
 
 # =====================================================================
 # [PART 4] 메인 진입점
 # =====================================================================
 
+@st.cache_data(ttl=3600)
+def check_engine_status():
+    status = {"pykrx": False, "naver": False}
+    try:
+        from pykrx import stock
+        stock.get_market_ohlcv_by_date((datetime.now() - timedelta(days=5)).strftime('%Y%m%d'), datetime.now().strftime('%Y%m%d'), "005930")
+        status["pykrx"] = True
+    except:
+        pass
+        
+    try:
+        fdr.DataReader("005930", (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d'))
+        status["naver"] = True
+    except:
+        pass
+    return status
+
 def main():
     st.markdown('<div class="main-title">AI 통합 주식 분석 대시보드</div>', unsafe_allow_html=True)
     
-    if PYKRX_AVAILABLE:
-        st.markdown('<p style="text-align:center; color:#10b981; font-size:0.9rem;">🟢 <b>데이터 소스:</b> 한국거래소 (pykrx 메인 엔진)</p>', unsafe_allow_html=True)
+    # 사이드바에서 데이터 소스 선택 및 상태 표시
+    st.sidebar.markdown("### ⚙️ 데이터 소스 설정")
+    engine_status = check_engine_status()
+    st.sidebar.markdown(f"""
+    **현재 엔진 상태:**
+    - 한국거래소(pykrx): {'🟢 정상 작동 중' if engine_status['pykrx'] else '🔴 연결 오류'}
+    - Naver & FDR: {'🟢 정상 작동 중' if engine_status['naver'] else '🔴 연결 오류'}
+    """)
+    
+    selected_engine = st.sidebar.radio(
+        "데이터 수집 엔진 선택", 
+        ["자동 (pykrx 우선)", "한국거래소 (pykrx) 강제", "Naver & FDR 강제"]
+    )
+    st.session_state['data_engine'] = selected_engine
+    
+    # 메인 화면 안내문 업데이트
+    if selected_engine == "한국거래소 (pykrx) 강제":
+        st.markdown('<p style="text-align:center; color:#10b981; font-size:0.9rem;">🟢 <b>현재 모드:</b> 한국거래소 (pykrx) 강제 수집</p>', unsafe_allow_html=True)
+    elif selected_engine == "Naver & FDR 강제":
+        st.markdown('<p style="text-align:center; color:#f59e0b; font-size:0.9rem;">🟡 <b>현재 모드:</b> Naver & FDR 우회 수집 강제</p>', unsafe_allow_html=True)
     else:
-        st.markdown(f'<p style="text-align:center; color:#f59e0b; font-size:0.9rem;">🟡 <b>데이터 소스:</b> Naver & FDR (세컨 플랜 우회 모드) <br><span style="font-size:0.75rem; color:#ef4444;">(pykrx 에러 원인: {PYKRX_ERROR})</span></p>', unsafe_allow_html=True)
+        if engine_status['pykrx']:
+            st.markdown('<p style="text-align:center; color:#10b981; font-size:0.9rem;">🟢 <b>현재 모드:</b> 자동 (한국거래소 pykrx 우선 사용)</p>', unsafe_allow_html=True)
+        else:
+            st.markdown('<p style="text-align:center; color:#f59e0b; font-size:0.9rem;">🟡 <b>현재 모드:</b> 자동 (Naver & FDR 세컨 플랜 작동 중)</p>', unsafe_allow_html=True)
         
     # 탭 구성
     tab1, tab2 = st.tabs(["🧭 마켓 타이밍 & 요약 픽", "🚀 스마트 수급 스캐너 (상세 검색)"])
