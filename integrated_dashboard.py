@@ -523,14 +523,14 @@ def show_advanced_candle(ticker, ticker_name, base_date, engine="자동"):
 
         fig = go.Figure()
         fig.add_trace(go.Candlestick(
-            x=df.index.strftime('%Y-%m-%d'), open=df['시가'], high=df['고가'], low=df['저가'], close=df['종가'], name='캔들',
+            x=df.index.strftime('%Y-%m-%d '), open=df['시가'], high=df['고가'], low=df['저가'], close=df['종가'], name='캔들',
             increasing_line_color='#FF4B4B', decreasing_line_color='#0068FF',
         ))
         ma_colors = {'MA5': '#FFC107', 'MA20': '#FF6B00', 'MA60': '#0099FF', 'MA120': '#9C27B0'}
         ma_names  = {'MA5': '5일선', 'MA20': '20일선', 'MA60': '60일선', 'MA120': '120일선'}
         for col, color in ma_colors.items():
             fig.add_trace(go.Scatter(
-                x=df.index.strftime('%Y-%m-%d'), y=df[col], mode='lines', line=dict(color=color, width=1.5), name=ma_names[col]
+                x=df.index.strftime('%Y-%m-%d '), y=df[col], mode='lines', line=dict(color=color, width=1.5), name=ma_names[col]
             ))
         fig.update_layout(
             title=f"📈 {ticker_name} ({ticker}) — {base_date[:4]}.{base_date[4:6]}.{base_date[6:]}",
@@ -543,7 +543,7 @@ def show_advanced_candle(ticker, ticker_name, base_date, engine="자동"):
 
         st.subheader("💰 투자자별 순매수 동향 (최근 20거래일)")
         inv_df = get_investor_flow(ticker, base_date, 20, engine)
-        if inv_df.empty: st.info("수급 데이터를 가져올 수 없습니다.")
+        if inv_df.empty: st.info("수급 데이터를 불러올 수 없습니다.")
         else:
             investor_cols = [c for c in ['기관합계', '외국인합계', '개인', '금융투자'] if c in inv_df.columns]
             name_map = {'기관합계': '🏢 기관', '외국인합계': '🌎 외국인', '개인': '👤 개인', '금융투자': '💼 금융투자'}
