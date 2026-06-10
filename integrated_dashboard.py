@@ -454,9 +454,9 @@ def get_investor_flow(ticker, base_date, days=20, engine="자동"):
                 
             dfclean = pd.DataFrame()
             dfclean['날짜'] = pd.to_datetime(df_target.iloc[:, 0], format='%Y.%m.%d', errors='coerce')
-            dfclean['종가'] = pd.to_numeric(df_target.iloc[:, 1], errors='coerce')
-            dfclean['기관_순매매량'] = pd.to_numeric(df_target.iloc[:, 5], errors='coerce')
-            dfclean['외국인_순매매량'] = pd.to_numeric(df_target.iloc[:, 6], errors='coerce')
+            dfclean['종가'] = pd.to_numeric(df_target.iloc[:, 1].astype(str).str.replace(',', ''), errors='coerce')
+            dfclean['기관_순매매량'] = pd.to_numeric(df_target.iloc[:, 5].astype(str).str.replace(',', ''), errors='coerce')
+            dfclean['외국인_순매매량'] = pd.to_numeric(df_target.iloc[:, 6].astype(str).str.replace(',', ''), errors='coerce')
             
             dfclean = dfclean.dropna(subset=['날짜'])
             dfclean['기관합계'] = dfclean['기관_순매매량'] * dfclean['종가']
@@ -523,14 +523,14 @@ def show_advanced_candle(ticker, ticker_name, base_date, engine="자동"):
 
         fig = go.Figure()
         fig.add_trace(go.Candlestick(
-            x=df.index, open=df['시가'], high=df['고가'], low=df['저가'], close=df['종가'], name='캔들',
+            x=df.index.strftime('%Y-%m-%d'), open=df['시가'], high=df['고가'], low=df['저가'], close=df['종가'], name='캔들',
             increasing_line_color='#FF4B4B', decreasing_line_color='#0068FF',
         ))
         ma_colors = {'MA5': '#FFC107', 'MA20': '#FF6B00', 'MA60': '#0099FF', 'MA120': '#9C27B0'}
         ma_names  = {'MA5': '5일선', 'MA20': '20일선', 'MA60': '60일선', 'MA120': '120일선'}
         for col, color in ma_colors.items():
             fig.add_trace(go.Scatter(
-                x=df.index, y=df[col], mode='lines', line=dict(color=color, width=1.5), name=ma_names[col]
+                x=df.index.strftime('%Y-%m-%d'), y=df[col], mode='lines', line=dict(color=color, width=1.5), name=ma_names[col]
             ))
         fig.update_layout(
             title=f"📈 {ticker_name} ({ticker}) — {base_date[:4]}.{base_date[4:6]}.{base_date[6:]}",
