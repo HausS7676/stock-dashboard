@@ -306,38 +306,80 @@ def get_latest_valid_date():
 
 @st.cache_data(ttl=3600)
 def scan_hybrid_flow(min_mktcap=2000, min_trading=5):
+    """
+    Naver Finance 크롤링 기반으로 전 종목 데이터를 수집하여 시가총액/거래대금으로 1차 필터링합니다.
+    (FinanceDataReader API 장애를 우회하는 하이브리드 엔진)
+    """
     try:
-        df_krx = fdr.StockListing('KRX')
-        df_krx['시가총액(억)'] = df_krx['Marcap'] / 1e8
-        df_krx['거래대금(억)'] = df_krx['Amount'] / 1e8
-        target_df = df_krx[(df_krx['시가총액(억)'] >= min_mktcap) & (df_krx['거래대금(억)'] >= min_trading)].copy()
-        target_df = target_df.sort_values('거래대금(억)', ascending=False).head(200)
-
         rows = []
         progress_text = st.empty()
         bar = st.progress(0)
-        total = len(target_df)
-
-        for i, (_, row) in enumerate(target_df.iterrows()):
-            try:
-                if i % 5 == 0:
-                    progress_text.text(f"스마트 스캔 중... ({i}/{total})")
-                    bar.progress(i / total)
-                volume_ratio = row['Volume'] / (row['Stocks'] * 0.001) if row['Stocks'] > 0 else 0
-                rows.append({
-                    '티커': row['Code'], '종목명': row['Name'], '현재가': int(row['Close']),
-                    '등락률(%)': round(row['ChagesRatio'], 2), '시가총액(억)': round(row['시가총액(억)']),
-                    '거래대금(억)': round(row['거래대금(억)'], 1), '수급점수': round(volume_ratio * abs(row['ChagesRatio']), 2),
-                })
-            except: continue
+        
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        # KOSPI(0), KOSDAQ(1) 시가총액 상위 1~6페이지 (총 600종목)
+        total_pages = 6 * 2
+        page_count = 0
+        
+        for sosok in [0, 1]:
+            for page in range(1, 7):
+                page_count += 1
+                progress_text.text(f"스마트 스캔 중 (Naver 우회 탐색)... ({page_count}/{total_pages})")
+                bar.progress(page_count / total_pages)
+                
+                url = f'https://finance.naver.com/sise/sise_market_sum.naver?sosok={sosok}&page={page}'
+                res = requests.get(url, headers=headers, timeout=10)
+                res.encoding = 'euc-kr'
+                soup = BeautifulSoup(res.text, 'html.parser')
+                table = soup.find('table', {'class': 'type_2'})
+                if not table: continue
+                
+                trs = table.find('tbody').find_all('tr') if table.find('tbody') else table.find_all('tr')
+                for tr in trs:
+                    if 'onmouseover' not in tr.attrs: continue
+                    tds = tr.find_all('td')
+                    if len(tds) < 10: continue
+                    
+                    a_tag = tds[1].find('a')
+                    if not a_tag: continue
+                    
+                    name = a_tag.text.strip()
+                    code = a_tag['href'].split('code=')[-1]
+                    try:
+                        price = int(tds[2].text.replace(',', ''))
+                        chg_ratio_text = tds[4].text.strip().replace('%', '')
+                        chg_ratio = float(chg_ratio_text) if chg_ratio_text else 0.0
+                        
+                        market_cap = int(tds[6].text.replace(',', '')) # 시가총액(억)
+                        stocks = int(tds[7].text.replace(',', '')) * 1000 # 상장주식수
+                        volume = int(tds[9].text.replace(',', ''))
+                        
+                        amount_억 = (price * volume) / 100000000
+                        if market_cap >= min_mktcap and amount_억 >= min_trading:
+                            vol_ratio = volume / stocks if stocks > 0 else 0
+                            rows.append({
+                                '티커': code,
+                                '종목명': name,
+                                '현재가': price,
+                                '등락률(%)': chg_ratio,
+                                '시가총액(억)': market_cap,
+                                '거래대금(억)': round(amount_억, 1),
+                                '수급점수': round(vol_ratio * abs(chg_ratio) * 100, 2)
+                            })
+                    except Exception:
+                        continue
 
         progress_text.empty()
         bar.empty()
+        
         df_result = pd.DataFrame(rows)
-        if not df_result.empty: df_result.sort_values('수급점수', ascending=False, inplace=True)
+        if not df_result.empty:
+            # 거래대금 상위 200개로 압축
+            df_result = df_result.sort_values('거래대금(억)', ascending=False).head(200)
+            df_result.sort_values('수급점수', ascending=False, inplace=True)
+            
         return df_result, get_latest_valid_date()
     except Exception as e:
-        st.error(f"데이터 스캔 중 오류: {e}")
+        st.error(f"데이터 스캔 중 오류 (Naver 크롤링): {e}")
         return pd.DataFrame(), ""
 
 @st.cache_data
